@@ -11,7 +11,6 @@ class AtiApiTransport extends AbstractTransport
     public function __construct(
         private readonly string $apiKey,
         private readonly string $endpoint,
-        private readonly bool $staging = false
     ) {
         parent::__construct();
     }
@@ -35,7 +34,7 @@ class AtiApiTransport extends AbstractTransport
             'subject'     => $email->getSubject(),
             'body'        => $email->getHtmlBody() ?? $email->getTextBody(),
             'attachments' => $files,
-            'staging'     => $this->staging,
+            'staging'     => config('ati-servico.staging'),
         ]);
 
         if ($response->failed()) {
