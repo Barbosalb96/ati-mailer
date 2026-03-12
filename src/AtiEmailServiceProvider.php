@@ -11,7 +11,7 @@ class AtiEmailServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->mergeConfigFrom(
-            __DIR__ . '/../config/meu-servico.php',
+            __DIR__ . '/../config/ati-servico.php',
             'meu-servico'
         );
     }
