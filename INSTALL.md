@@ -104,19 +104,20 @@ Mail::raw('Teste de envio via API', fn ($m) => $m->to('destino@exemplo.com')->su
 
 ---
 
-## Ajustar o payload da request
+## Autenticação e payload da request
 
-No `AtiApiTransport::doSend()`, o JSON enviado à API é:
+O transporte usa **Basic Auth**. A `ATI_EMAIL_KEY` deve estar em Base64 no formato `usuario:senha` — exatamente como fornecida pela ATI.
+
+No `AtiApiTransport::doSend()`, o header e o JSON enviados à API são:
 
 ```php
+// Header
+'Authorization' => 'Basic <ATI_EMAIL_KEY>'
+
+// Payload
 [
-    'to'      => ['destino@exemplo.com'],   // array de endereços
-    'subject' => 'Assunto do e-mail',
-    'html'    => '<p>Corpo HTML</p>',
-    'text'    => 'Corpo texto plano',
-    'from'    => 'remetente@seudominio.com',
+    'destinatarios' => ['destino@exemplo.com'],  // array de endereços
+    'assunto'       => 'Assunto do e-mail',
+    'corpo'         => '<p>Corpo HTML</p>',       // HTML preferido; fallback para texto plano
 ]
 ```
-
-Se a sua API espera campos diferentes (ex: `recipient_email` em vez de `to`),
-edite apenas esse array no método `doSend`.

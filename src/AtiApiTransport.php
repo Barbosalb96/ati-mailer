@@ -26,14 +26,12 @@ class AtiApiTransport extends AbstractTransport
         );
 
         $response = Http::withHeaders([
-            'Authorization' => 'Bearer ' . $this->apiKey,
+            'Authorization' => 'Basic ' . $this->apiKey,
             'Accept'        => 'application/json',
         ])->post($this->endpoint, [
-            'to'      => $recipients,
-            'subject' => $email->getSubject(),
-            'html'    => $email->getHtmlBody(),
-            'text'    => $email->getTextBody(),
-            'from'    => $email->getFrom()[0]->getAddress(),
+            'destinatarios' => $recipients,
+            'assunto'       => $email->getSubject(),
+            'corpo'         => $email->getHtmlBody() ?? $email->getTextBody(),
         ]);
 
         if ($response->failed()) {
