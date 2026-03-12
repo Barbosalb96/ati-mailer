@@ -16,6 +16,8 @@ class InstallCommand extends Command
         $this->publishConfig();
         $this->writeEnvVariables();
         $this->registerMailer();
+        $this->registerHttpMacro();
+        $this->registerStatusRoute();
 
         $this->newLine();
         $this->info('✔ ATI Email configurado com sucesso!');
@@ -97,6 +99,107 @@ PHP;
 
         file_put_contents($mailConfigPath, $content);
         $this->line('  [ok] mailer "ati" adicionado em config/mail.php');
+    }
+
+    private function registerHttpMacro(): void
+    {
+        $providerPath = app_path('Providers/AppServiceProvider.php');
+
+        if (! file_exists($providerPath)) {
+            $this->warn('  [skip] AppServiceProvider.php não encontrado');
+            return;
+        }
+
+        $content = file_get_contents($providerPath);
+
+        if (Str::contains($content, 'atiEmail')) {
+            $this->line('  [skip] Http macro "atiEmail" já existe em AppServiceProvider');
+            return;
+        }
+
+        $macro = <<<'PHP'
+        Http::macro('atiEmail', function () {
+            return Http::baseUrl(rtrim(env('ATI_EMAIL_ENDPOINT'), '/') . '/api/v2/')
+                ->withHeaders([
+                    'Authorization' => 'Bearer ' . env('ATI_EMAIL_KEY'),
+                    'Accept' => 'application/json',
+                ])
+                ->withoutVerifying()
+                ->acceptJson();
+        });
+PHP;
+
+        // Garante o use de Http no topo do arquivo
+        if (! Str::contains($content, 'use Illuminate\Support\Facades\Http;')) {
+            $content = str_replace(
+                'use Illuminate\Support\ServiceProvider;',
+                "use Illuminate\Support\Facades\Http;\nuse Illuminate\Support\ServiceProvider;",
+                $content
+            );
+        }
+
+        // Injeta dentro do boot(), antes do fechamento '}'
+        $content = preg_replace(
+            '/(\bpublic function boot\(\): void\s*\{)/',
+            "$1\n        {$macro}\n",
+            $content,
+            1
+        );
+
+        file_put_contents($providerPath, $content);
+        $this->line('  [ok] Http macro "atiEmail" adicionado em AppServiceProvider');
+    }
+
+    private function registerStatusRoute(): void
+    {
+        // Laravel 11+ usa routes/web.php; tenta api.php primeiro, depois web.php
+        $candidates = [
+            base_path('routes/api.php'),
+            base_path('routes/web.php'),
+        ];
+
+        $routesPath = null;
+        foreach ($candidates as $candidate) {
+            if (file_exists($candidate)) {
+                $routesPath = $candidate;
+                break;
+            }
+        }
+
+        if ($routesPath === null) {
+            $this->warn('  [skip] Nenhum arquivo de rotas encontrado — adicione a rota manualmente (veja INSTALL.md)');
+            return;
+        }
+
+        $content = file_get_contents($routesPath);
+
+        if (Str::contains($content, 'status/{uuid}')) {
+            $this->line('  [skip] rota /status/{uuid} já existe');
+            return;
+        }
+
+        $useHttp  = 'use Illuminate\Support\Facades\Http;';
+        $useRoute = 'use Illuminate\Support\Facades\Route;';
+
+        if (! Str::contains($content, $useHttp)) {
+            $content = $useRoute . "\n" . $useHttp . "\n" . ltrim(str_replace($useRoute, '', $content));
+        }
+
+        $route = <<<'PHP'
+
+Route::get('/status/{uuid}', function (string $uuid) {
+    return Http::atiEmail()
+        ->get("messages/{$uuid}/status", [
+            'staging' => env('STAGING', true),
+        ])
+        ->json();
+});
+PHP;
+
+        $content .= $route;
+
+        file_put_contents($routesPath, $content);
+        $this->line("  [ok] rota /status/{uuid} adicionada em " . basename($routesPath));
     }
 
     private function injectBeforeMailersClosingBracket(string $content, string $block): string

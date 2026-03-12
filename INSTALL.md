@@ -21,6 +21,8 @@ Este comando faz tudo automaticamente:
 - Publica `config/ati-servico.php` no projeto
 - Adiciona `MAIL_MAILER`, `ATI_EMAIL_KEY`, `ATI_EMAIL_ENDPOINT` e `STAGING` no `.env` (sem sobrescrever valores existentes)
 - Injeta o bloco `'ati'` no array `mailers` do `config/mail.php`
+- Adiciona o `Http::macro('atiEmail', ...)` no `boot()` do `AppServiceProvider`
+- Adiciona a rota `GET /status/{uuid}` em `routes/api.php` (ou `routes/web.php` como fallback)
 
 Depois edite os valores reais no `.env`:
 
@@ -72,7 +74,43 @@ O bloco `'ati'` deve ser um item **de topo** no array `mailers`, nunca aninhado 
 
 ---
 
-## 4. (Opcional) Publicar o config
+## 4. Http macro e rota de status
+
+O instalador adiciona automaticamente o macro `Http::atiEmail()` no `AppServiceProvider`:
+
+```php
+Http::macro('atiEmail', function () {
+    return Http::baseUrl(rtrim(env('ATI_EMAIL_ENDPOINT'), '/') . '/api/v2/')
+        ->withHeaders([
+            'Authorization' => 'Bearer ' . env('ATI_EMAIL_KEY'),
+            'Accept' => 'application/json',
+        ])
+        ->withoutVerifying()
+        ->acceptJson();
+});
+```
+
+E também a rota para consultar o status de um envio em `routes/api.php`:
+
+```php
+Route::get('/status/{uuid}', function (string $uuid) {
+    return Http::atiEmail()
+        ->get("messages/{$uuid}/status", [
+            'staging' => env('STAGING', true),
+        ])
+        ->json();
+});
+```
+
+Uso:
+
+```
+GET /status/550e8400-e29b-41d4-a716-446655440000
+```
+
+---
+
+## 5. (Opcional) Publicar o config
 
 Se quiser editar `config/ati-servico.php` no projeto:
 
