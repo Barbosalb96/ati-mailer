@@ -12,7 +12,7 @@ class AtiEmailServiceProvider extends ServiceProvider
     {
         $this->mergeConfigFrom(
             __DIR__ . '/../config/ati-servico.php',
-            'meu-servico'
+            'ati-servico'
         );
     }
 
