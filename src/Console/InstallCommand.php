@@ -173,33 +173,58 @@ PHP;
 
         $content = file_get_contents($routesPath);
 
-        if (Str::contains($content, 'status/{uuid}')) {
-            $this->line('  [skip] rota /status/{uuid} já existe');
-            return;
-        }
-
         $useHttp  = 'use Illuminate\Support\Facades\Http;';
         $useRoute = 'use Illuminate\Support\Facades\Route;';
+        $useMail  = 'use Illuminate\Support\Facades\Mail;';
 
         if (! Str::contains($content, $useHttp)) {
             $content = $useRoute . "\n" . $useHttp . "\n" . ltrim(str_replace($useRoute, '', $content));
         }
 
-        $route = <<<'PHP'
+        if (! Str::contains($content, $useMail)) {
+            $content = str_replace($useHttp, $useHttp . "\n" . $useMail, $content);
+        }
+
+        if (! Str::contains($content, 'send-test')) {
+            $sendTest = <<<'PHP'
+
+Route::get('/send-test', function () {
+    $filePath = storage_path('app/teste-anexo.txt');
+    file_put_contents($filePath, 'Conteudo do arquivo de teste ATI.');
+
+    $sentMessage = Mail::raw('Teste de envio via API', function ($m) use ($filePath) {
+        $m->to(['lucas.silva@seati.ma.gov.br', 'lucas.silva@ati.ma.gov.br'])
+          ->subject('Teste ATI')
+          ->attach($filePath, ['as' => 'anexo-teste.txt', 'mime' => 'text/plain']);
+    });
+
+    dd(Mail::getSymfonyTransport()->lastResponse);
+});
+PHP;
+            $content .= $sendTest;
+            $this->line("  [ok] rota /send-test adicionada em " . basename($routesPath));
+        } else {
+            $this->line('  [skip] rota /send-test já existe');
+        }
+
+        if (! Str::contains($content, 'status/{uuid}')) {
+            $statusRoute = <<<'PHP'
 
 Route::get('/status/{uuid}', function (string $uuid) {
     return Http::atiEmail()
-        ->get("messages/{$uuid}/status", [
+        ->post("messages/{$uuid}/status", [
             'staging' => env('STAGING', true),
         ])
         ->json();
 });
 PHP;
-
-        $content .= $route;
+            $content .= $statusRoute;
+            $this->line("  [ok] rota /status/{uuid} adicionada em " . basename($routesPath));
+        } else {
+            $this->line('  [skip] rota /status/{uuid} já existe');
+        }
 
         file_put_contents($routesPath, $content);
-        $this->line("  [ok] rota /status/{uuid} adicionada em " . basename($routesPath));
     }
 
     private function injectBeforeMailersClosingBracket(string $content, string $block): string

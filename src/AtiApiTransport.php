@@ -27,7 +27,7 @@ class AtiApiTransport extends AbstractTransport
         $files = $email->getAttachments();
 
         $response = Http::withHeaders([
-            'Authorization' => 'bearer ' . $this->apiKey,
+            'Authorization' => 'Bearer ' . $this->apiKey,
             'Accept'        => 'application/json',
         ])->post($this->endpoint, [
             'recipients'  => $recipients,
@@ -45,6 +45,17 @@ class AtiApiTransport extends AbstractTransport
                     $response->body()
                 )
             );
+        }
+
+        if ($response->successful()) {
+            $symfonyMessage = $message->getOriginalMessage();
+
+            $symfonyMessage->getHeaders()->addTextHeader(
+                'X-Ati-Api-Response',
+                $response->body()
+            );
+        } else {
+            throw new \RuntimeException("Erro API: " . $response->body());
         }
     }
 
