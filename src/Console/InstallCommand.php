@@ -101,11 +101,32 @@ PHP;
 
     private function injectBeforeMailersClosingBracket(string $content, string $block): string
     {
-        return preg_replace_callback(
-            "/('mailers'\s*=>\s*\[)(.*?)(\n\s*\])/s",
-            fn ($m) => $m[1] . $m[2] . $block . $m[3],
-            $content,
-            limit: 1
-        );
+        $start = strpos($content, "'mailers'");
+        if ($start === false) {
+            return $content;
+        }
+
+        $openPos = strpos($content, '[', $start);
+        if ($openPos === false) {
+            return $content;
+        }
+
+        $depth = 0;
+        $pos   = $openPos;
+        $len   = strlen($content);
+
+        while ($pos < $len) {
+            if ($content[$pos] === '[') {
+                $depth++;
+            } elseif ($content[$pos] === ']') {
+                $depth--;
+                if ($depth === 0) {
+                    return substr($content, 0, $pos) . $block . substr($content, $pos);
+                }
+            }
+            $pos++;
+        }
+
+        return $content;
     }
 }

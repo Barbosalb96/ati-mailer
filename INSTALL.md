@@ -46,22 +46,27 @@ ATI_EMAIL_ENDPOINT=https://api.seuservico.com/v1/send
 
 ## 3. Adicionar o mailer em `config/mail.php`
 
-Dentro do array `mailers`, adicione:
+O bloco `'ati'` deve ser um item **de topo** no array `mailers`, nunca aninhado dentro de outro driver (como `smtp`):
 
 ```php
 'mailers' => [
 
-    // ... outros drivers (smtp, ses, etc.)
+    'smtp' => [
+        'transport' => 'smtp',
+        // ... campos do smtp ...
+    ],
 
+    // CORRETO: 'ati' no mesmo nível que 'smtp', 'ses', etc.
     'ati' => [
         'transport' => 'ati',
-        // Opcional: sobrescreve as variáveis de ambiente só para este mailer
         // 'key'      => env('ATI_EMAIL_KEY'),
         // 'endpoint' => env('ATI_EMAIL_ENDPOINT'),
     ],
 
 ],
 ```
+
+> **Atenção:** se usar `php artisan ati:install` em versões anteriores a esta correção, verifique se o bloco foi inserido no nível correto. O `ati` aninhado dentro do `smtp` causa o erro `Mailer [ati] is not defined`.
 
 ---
 
