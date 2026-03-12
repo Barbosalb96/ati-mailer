@@ -19,7 +19,7 @@ class AtiEmailServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->publishes([
-            __DIR__ . '/../config/meu-servico.php' => config_path('meu-servico.php'),
+            __DIR__ . '/../config/ati-servico.php' => config_path('ati-servico.php'),
         ], 'ati-email-config');
 
         if ($this->app->runningInConsole()) {
@@ -28,8 +28,8 @@ class AtiEmailServiceProvider extends ServiceProvider
 
         Mail::extend('ati', function (array $config) {
             return new AtiApiTransport(
-                apiKey:   $config['key']      ?? config('meu-servico.key'),
-                endpoint: $config['endpoint'] ?? config('meu-servico.endpoint'),
+                apiKey:   $config['key']      ?? config('ati-servico.key'),
+                endpoint: $config['endpoint'] ?? config('ati-servico.endpoint'),
             );
         });
     }

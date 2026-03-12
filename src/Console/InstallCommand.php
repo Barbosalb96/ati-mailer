@@ -30,7 +30,7 @@ class InstallCommand extends Command
     private function publishConfig(): void
     {
         $this->callSilently('vendor:publish', ['--tag' => 'ati-email-config']);
-        $this->line('  [ok] config/meu-servico.php publicado');
+        $this->line('  [ok] config/ati-servico.php publicado');
     }
 
     private function writeEnvVariables(): void
