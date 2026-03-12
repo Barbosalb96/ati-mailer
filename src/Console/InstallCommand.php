@@ -1,6 +1,6 @@
 <?php
 
-namespace Ati\ApiEmailLib\Console;
+namespace Atima\ApiEmailLib\Console;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Str;

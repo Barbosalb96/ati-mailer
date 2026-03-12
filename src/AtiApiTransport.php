@@ -1,6 +1,6 @@
 <?php
 
-namespace Ati\ApiEmailLib;
+namespace Atima\ApiEmailLib;
 
 use Illuminate\Support\Facades\Http;
 use Symfony\Component\Mailer\SentMessage;

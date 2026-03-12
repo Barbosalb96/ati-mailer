@@ -1,5 +1,5 @@
 {
-    "name": "ati/api-email-lib",
+    "name": "atima/api-email-lib",
     "description": "Laravel mail driver para envio via API HTTP customizada",
     "type": "library",
     "license": "MIT",
@@ -17,13 +17,13 @@
     },
     "autoload": {
         "psr-4": {
-            "Ati\\ApiEmailLib\\": "src/"
+            "Atima\\ApiEmailLib\\": "src/"
         }
     },
     "extra": {
         "laravel": {
             "providers": [
-                "Ati\\ApiEmailLib\\AtiEmailServiceProvider"
+                "Atima\\ApiEmailLib\\AtiEmailServiceProvider"
             ]
         }
     },

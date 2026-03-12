@@ -1,8 +1,8 @@
 <?php
 
-namespace Ati\ApiEmailLib;
+namespace Atima\ApiEmailLib;
 
-use Ati\ApiEmailLib\Console\InstallCommand;
+use Atima\ApiEmailLib\Console\InstallCommand;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\ServiceProvider;
 
