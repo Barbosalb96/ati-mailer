@@ -1,5 +1,4 @@
 <?php
-
 namespace Atima\ApiEmailLib;
 
 use Illuminate\Support\Facades\Http;
@@ -12,6 +11,7 @@ class AtiApiTransport extends AbstractTransport
     public function __construct(
         private readonly string $apiKey,
         private readonly string $endpoint,
+        private readonly bool $staging = false
     ) {
         parent::__construct();
     }
@@ -21,17 +21,21 @@ class AtiApiTransport extends AbstractTransport
         $email = MessageConverter::toEmail($message->getOriginalMessage());
 
         $recipients = array_map(
-            fn ($address) => $address->getAddress(),
+            fn($address) => $address->getAddress(),
             $email->getTo()
         );
 
+        $files = $email->getAttachments();
+
         $response = Http::withHeaders([
-            'Authorization' => 'Basic ' . $this->apiKey,
+            'Authorization' => 'bearer ' . $this->apiKey,
             'Accept'        => 'application/json',
         ])->post($this->endpoint, [
-            'destinatarios' => $recipients,
-            'assunto'       => $email->getSubject(),
-            'corpo'         => $email->getHtmlBody() ?? $email->getTextBody(),
+            'recipients'  => $recipients,
+            'subject'     => $email->getSubject(),
+            'body'        => $email->getHtmlBody() ?? $email->getTextBody(),
+            'attachments' => $files,
+            'staging'     => $this->staging,
         ]);
 
         if ($response->failed()) {
@@ -43,6 +47,24 @@ class AtiApiTransport extends AbstractTransport
                 )
             );
         }
+    }
+
+    protected function prepareAttachments(array $attachments): array
+    {
+        $anexos = [];
+
+        foreach ($attachments as $attachment) {
+            $conteudo = $attachment->getMediaSubtype() === 'pdf'
+                ? base64_encode(file_get_contents('files/' . $attachment->getName()))
+                : base64_encode($attachment->getBody());
+
+            $anexos[] = [
+                'filename' => $attachment->getName(),
+                'content'  => $conteudo,
+            ];
+        }
+
+        return $anexos;
     }
 
     public function __toString(): string
