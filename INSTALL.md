@@ -3,7 +3,7 @@
 ## 1. Instalar via Composer
 
 ```bash
-composer require ati/api-email-lib
+composer require atima/api-email-lib
 ```
 
 O auto-discovery do Laravel registra o `AtiEmailServiceProvider` automaticamente.
@@ -18,8 +18,8 @@ php artisan ati:install
 ```
 
 Este comando faz tudo automaticamente:
-- Publica `config/meu-servico.php` no projeto
-- Adiciona `MAIL_MAILER`, `ATI_EMAIL_KEY` e `ATI_EMAIL_ENDPOINT` no `.env` (sem sobrescrever valores existentes)
+- Publica `config/ati-servico.php` no projeto
+- Adiciona `MAIL_MAILER`, `ATI_EMAIL_KEY`, `ATI_EMAIL_ENDPOINT` e `STAGING` no `.env` (sem sobrescrever valores existentes)
 - Injeta o bloco `'ati'` no array `mailers` do `config/mail.php`
 
 Depois edite os valores reais no `.env`:
@@ -27,6 +27,7 @@ Depois edite os valores reais no `.env`:
 ```dotenv
 ATI_EMAIL_KEY=sua_api_key_aqui
 ATI_EMAIL_ENDPOINT=https://api.seuservico.com/v1/send
+STAGING=true
 ```
 
 ---
@@ -40,6 +41,7 @@ MAIL_FROM_NAME="${APP_NAME}"
 
 ATI_EMAIL_KEY=sua_api_key_aqui
 ATI_EMAIL_ENDPOINT=https://api.seuservico.com/v1/send
+STAGING=true
 ```
 
 ---
@@ -70,34 +72,28 @@ O bloco `'ati'` deve ser um item **de topo** no array `mailers`, nunca aninhado 
 
 ---
 
-## 4. (Opcional) Adicionar em `config/services.php`
+## 4. (Opcional) Publicar o config
 
-Se preferir centralizar credenciais de terceiros no padrão Laravel:
-
-```php
-'ati' => [
-    'key'      => env('ATI_EMAIL_KEY'),
-    'endpoint' => env('ATI_EMAIL_ENDPOINT', 'https://api.seuservico.com/v1/send'),
-],
-```
-
-> O pacote lê de `config('meu-servico.*)` por padrão, mas o `AtiEmailServiceProvider`
-> aceita os valores do array `$config` passado pelo `config/mail.php`, então qualquer
-> uma das abordagens funciona.
-
----
-
-## 5. (Opcional) Publicar o config
-
-Se quiser editar `config/meu-servico.php` no projeto:
+Se quiser editar `config/ati-servico.php` no projeto:
 
 ```bash
 php artisan vendor:publish --tag=ati-email-config
 ```
 
+O arquivo publicado expõe as seguintes chaves:
+
+```php
+// config/ati-servico.php
+return [
+    'key'      => env('ATI_EMAIL_KEY'),
+    'endpoint' => env('ATI_EMAIL_ENDPOINT', 'https://api.seuservico.com/v1/send'),
+    'staging'  => env('STAGING', true),
+];
+```
+
 ---
 
-## 6. Testar
+## 5. Testar
 
 ```bash
 php artisan tinker
@@ -111,18 +107,37 @@ Mail::raw('Teste de envio via API', fn ($m) => $m->to('destino@exemplo.com')->su
 
 ## Autenticação e payload da request
 
-O transporte usa **Basic Auth**. A `ATI_EMAIL_KEY` deve estar em Base64 no formato `usuario:senha` — exatamente como fornecida pela ATI.
+O transporte usa **Bearer Token**. A `ATI_EMAIL_KEY` é enviada diretamente no header `Authorization`.
 
 No `AtiApiTransport::doSend()`, o header e o JSON enviados à API são:
 
 ```php
 // Header
-'Authorization' => 'Basic <ATI_EMAIL_KEY>'
+'Authorization' => 'bearer <ATI_EMAIL_KEY>'
 
 // Payload
 [
-    'destinatarios' => ['destino@exemplo.com'],  // array de endereços
-    'assunto'       => 'Assunto do e-mail',
-    'corpo'         => '<p>Corpo HTML</p>',       // HTML preferido; fallback para texto plano
+    'recipients'  => ['destino@exemplo.com'],  // array de endereços
+    'subject'     => 'Assunto do e-mail',
+    'body'        => '<p>Corpo HTML</p>',       // HTML preferido; fallback para texto plano
+    'attachments' => [...],                     // anexos do e-mail (veja abaixo)
+    'staging'     => true,                      // controlado por config('ati-servico.staging') / env STAGING
 ]
 ```
+
+---
+
+## Envio com anexos
+
+Para anexar arquivos, use o método `attach` normalmente pelo Laravel Mail:
+
+```php
+Mail::send([], [], function ($m) {
+    $m->to('destino@exemplo.com')
+      ->subject('E-mail com anexo')
+      ->setBody('<p>Veja o arquivo em anexo.</p>', 'text/html')
+      ->attach('/caminho/para/arquivo.pdf');
+});
+```
+
+Os anexos são repassados diretamente no campo `attachments` do payload enviado à API.
