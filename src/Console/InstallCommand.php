@@ -71,14 +71,12 @@ class InstallCommand extends Command
 
         $env = file_get_contents($envPath);
 
-        $certPath = storage_path('app/ati-cacert.pem');
-
         $entries = [
             'MAIL_MAILER'        => 'ati',
             'ATI_EMAIL_KEY'      => 'sua_api_key_aqui',
             'ATI_EMAIL_ENDPOINT' => 'https://api.seuservico.com/v1/send',
             'STAGING'            => 'true',
-            'ATI_SSL_CERT'       => file_exists($certPath) ? $certPath : 'true',
+            'ATI_SSL_CERT'       => 'false',
         ];
 
         foreach ($entries as $key => $default) {
