@@ -14,6 +14,7 @@ class InstallCommand extends Command
         $this->info('Configurando ATI Email...');
 
         $this->publishConfig();
+        $this->downloadCaCert();
         $this->writeEnvVariables();
         $this->registerMailer();
         $this->registerHttpMacro();
@@ -27,6 +28,31 @@ class InstallCommand extends Command
     }
 
     // -------------------------------------------------------------------------
+
+    private function downloadCaCert(): void
+    {
+        $certPath = storage_path('app/ati-cacert.pem');
+        $certUrl  = 'https://curl.se/ca/cacert.pem';
+
+        $this->line('  [..] Baixando bundle de certificados SSL...');
+
+        $context = stream_context_create([
+            'http' => ['timeout' => 15],
+            'ssl'  => ['verify_peer' => true, 'verify_peer_name' => true],
+        ]);
+
+        $pem = @file_get_contents($certUrl, false, $context);
+
+        if ($pem === false || ! str_contains($pem, 'CERTIFICATE')) {
+            $this->warn('  [skip] Não foi possível baixar o cacert.pem — SSL usará o bundle padrão do sistema.');
+            return;
+        }
+
+        @mkdir(dirname($certPath), 0755, true);
+        file_put_contents($certPath, $pem);
+
+        $this->line("  [ok] cacert.pem salvo em storage/app/ati-cacert.pem");
+    }
 
     private function publishConfig(): void
     {
@@ -45,11 +71,14 @@ class InstallCommand extends Command
 
         $env = file_get_contents($envPath);
 
+        $certPath = storage_path('app/ati-cacert.pem');
+
         $entries = [
             'MAIL_MAILER'        => 'ati',
             'ATI_EMAIL_KEY'      => 'sua_api_key_aqui',
             'ATI_EMAIL_ENDPOINT' => 'https://api.seuservico.com/v1/send',
-            'STAGING'            => true,
+            'STAGING'            => 'true',
+            'ATI_SSL_CERT'       => file_exists($certPath) ? $certPath : 'true',
         ];
 
         foreach ($entries as $key => $default) {
@@ -124,7 +153,9 @@ PHP;
                     'Authorization' => 'Bearer ' . env('ATI_EMAIL_KEY'),
                     'Accept' => 'application/json',
                 ])
-                ->withoutVerifying()
+                ->withOptions([
+                    'verify' => env('ATI_SSL_CERT', true),
+                ])
                 ->acceptJson();
         });
 PHP;
@@ -192,13 +223,18 @@ Route::get('/send-test', function () {
     $filePath = storage_path('app/teste-anexo.txt');
     file_put_contents($filePath, 'Conteudo do arquivo de teste ATI.');
 
-    $sentMessage = Mail::raw('Teste de envio via API', function ($m) use ($filePath) {
+    Mail::raw('Teste de envio via API', function ($m) use ($filePath) {
         $m->to(['lucas.silva@seati.ma.gov.br', 'lucas.silva@ati.ma.gov.br'])
           ->subject('Teste ATI')
           ->attach($filePath, ['as' => 'anexo-teste.txt', 'mime' => 'text/plain']);
     });
 
-    dd(Mail::getSymfonyTransport()->lastResponse);
+    $transport = Mail::getSymfonyTransport();
+
+    return response()->json([
+        'status'   => 'enviado',
+        'response' => $transport->lastResponse,
+    ]);
 });
 PHP;
             $content .= $sendTest;

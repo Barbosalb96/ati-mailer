@@ -19,6 +19,16 @@ return [
     */
     'endpoint' => env('ATI_EMAIL_ENDPOINT', 'https://api.seuservico.com/v1/send'),
 
-    'staging'  => env('STAGING', true), 
+    'staging'  => env('STAGING', true),
+
+    /*
+    |--------------------------------------------------------------------------
+    | SSL Certificate
+    |--------------------------------------------------------------------------
+    | Caminho para o bundle de CAs usado na verificação SSL.
+    | Gerado automaticamente pelo comando ati:install.
+    | Defina false para desabilitar (não recomendado).
+    */
+    'ssl_cert' => env('ATI_SSL_CERT', true),
 
 ];

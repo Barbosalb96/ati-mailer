@@ -8,6 +8,8 @@ use Symfony\Component\Mime\MessageConverter;
 
 class AtiApiTransport extends AbstractTransport
 {
+    public array $lastResponse = [];
+
     public function __construct(
         private readonly string $apiKey,
         private readonly string $endpoint,
@@ -24,16 +26,16 @@ class AtiApiTransport extends AbstractTransport
             $email->getTo()
         );
 
-        $files = $email->getAttachments();
-
         $response = Http::withHeaders([
             'Authorization' => 'Bearer ' . $this->apiKey,
             'Accept'        => 'application/json',
-        ])->post($this->endpoint, [
+        ])->withOptions([
+            'verify' => config('ati-servico.ssl_cert', true),
+        ])->post($this->endpoint . '/v2/messages/send', [
             'recipients'  => $recipients,
             'subject'     => $email->getSubject(),
             'body'        => $email->getHtmlBody() ?? $email->getTextBody(),
-            'attachments' => $files,
+            'attachments' => $this->prepareAttachments($email->getAttachments()),
             'staging'     => config('ati-servico.staging'),
         ]);
 
@@ -47,16 +49,12 @@ class AtiApiTransport extends AbstractTransport
             );
         }
 
-        if ($response->successful()) {
-            $symfonyMessage = $message->getOriginalMessage();
+        $this->lastResponse = $response->json() ?? [];
 
-            $symfonyMessage->getHeaders()->addTextHeader(
-                'X-Ati-Api-Response',
-                $response->body()
-            );
-        } else {
-            throw new \RuntimeException("Erro API: " . $response->body());
-        }
+        $message->getOriginalMessage()->getHeaders()->addTextHeader(
+            'X-Ati-Api-Response',
+            $response->body()
+        );
     }
 
     protected function prepareAttachments(array $attachments): array
@@ -64,16 +62,18 @@ class AtiApiTransport extends AbstractTransport
         $anexos = [];
 
         foreach ($attachments as $attachment) {
-            $conteudo = $attachment->getMediaSubtype() === 'pdf'
-                ? base64_encode(file_get_contents('files/' . $attachment->getName()))
-                : base64_encode($attachment->getBody());
+            $body    = $attachment->getBody();
+            $decoded = base64_decode($body, strict: true);
+            $content = ($decoded !== false && base64_encode($decoded) === $body)
+                ? $body
+                : base64_encode($body);
 
             $anexos[] = [
                 'filename' => $attachment->getName(),
-                'content'  => $conteudo,
+                'content'  => $content,
+                'mime'     => $attachment->getMediaType() . '/' . $attachment->getMediaSubtype(),
             ];
         }
-
         return $anexos;
     }
 

@@ -19,7 +19,8 @@ php artisan ati:install
 
 Este comando faz tudo automaticamente:
 - Publica `config/ati-servico.php` no projeto
-- Adiciona `MAIL_MAILER`, `ATI_EMAIL_KEY`, `ATI_EMAIL_ENDPOINT` e `STAGING` no `.env` (sem sobrescrever valores existentes)
+- **Baixa o bundle de certificados SSL** (`cacert.pem`) do curl.se e salva em `storage/app/ati-cacert.pem`
+- Adiciona `MAIL_MAILER`, `ATI_EMAIL_KEY`, `ATI_EMAIL_ENDPOINT`, `STAGING` e `ATI_SSL_CERT` no `.env` (sem sobrescrever valores existentes)
 - Injeta o bloco `'ati'` no array `mailers` do `config/mail.php`
 - Adiciona o `Http::macro('atiEmail', ...)` no `boot()` do `AppServiceProvider`
 - Adiciona a rota `GET /status/{uuid}` em `routes/api.php` (ou `routes/web.php` como fallback)
@@ -131,7 +132,7 @@ return [
 
 ---
 
-## 5. Testar
+## 6. Testar
 
 ```bash
 php artisan tinker
@@ -178,4 +179,14 @@ Mail::send([], [], function ($m) {
 });
 ```
 
-Os anexos são repassados diretamente no campo `attachments` do payload enviado à API.
+Os anexos são repassados no campo `attachments` do payload enviado à API com o seguinte formato:
+
+```json
+{
+  "filename": "arquivo.pdf",
+  "content":  "<base64>",
+  "mime":     "application/pdf"
+}
+```
+
+> **Detecção automática de base64:** O transporte verifica se o conteúdo do anexo já está em base64 antes de codificá-lo. Caso já esteja, o valor é repassado sem re-codificação, evitando dupla codificação quando o anexo vier pré-codificado.
