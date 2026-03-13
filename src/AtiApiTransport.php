@@ -1,10 +1,13 @@
 <?php
+
 namespace Atima\ApiEmailLib;
 
 use Illuminate\Support\Facades\Http;
 use Symfony\Component\Mailer\SentMessage;
 use Symfony\Component\Mailer\Transport\AbstractTransport;
+use Symfony\Component\Mime\Email;
 use Symfony\Component\Mime\MessageConverter;
+use Symfony\Component\Mime\Part\DataPart;
 
 class AtiApiTransport extends AbstractTransport
 {
@@ -19,34 +22,15 @@ class AtiApiTransport extends AbstractTransport
 
     protected function doSend(SentMessage $message): void
     {
-        $email = MessageConverter::toEmail($message->getOriginalMessage());
-
-        $recipients = array_map(
-            fn($address) => $address->getAddress(),
-            $email->getTo()
-        );
-
-        $response = Http::withHeaders([
-            'Authorization' => 'Bearer ' . $this->apiKey,
-            'Accept'        => 'application/json',
-        ])->withOptions([
-            'verify' => config('ati-servico.ssl_cert', true),
-        ])->post($this->endpoint . '/v2/messages/send', [
-            'recipients'  => $recipients,
-            'subject'     => $email->getSubject(),
-            'body'        => $email->getHtmlBody() ?? $email->getTextBody(),
-            'attachments' => $this->prepareAttachments($email->getAttachments()),
-            'staging'     => config('ati-servico.staging'),
-        ]);
+        $email    = MessageConverter::toEmail($message->getOriginalMessage());
+        $response = $this->sendToApi($email);
 
         if ($response->failed()) {
-            throw new \RuntimeException(
-                sprintf(
-                    '[AtiApiTransport] Falha ao enviar e-mail. Status: %d — %s',
-                    $response->status(),
-                    $response->body()
-                )
-            );
+            throw new \RuntimeException(sprintf(
+                '[AtiApiTransport] Falha ao enviar e-mail. Status: %d — %s',
+                $response->status(),
+                $response->body()
+            ));
         }
 
         $this->lastResponse = $response->json() ?? [];
@@ -57,24 +41,48 @@ class AtiApiTransport extends AbstractTransport
         );
     }
 
-    protected function prepareAttachments(array $attachments): array
+    private function sendToApi(Email $email): \Illuminate\Http\Client\Response
     {
-        $anexos = [];
+        return Http::withHeaders($this->buildHeaders())
+            ->withOptions(['verify' => config('ati-servico.ssl_cert', true)])
+            ->post($this->endpoint . '/v2/messages/send', $this->buildPayload($email));
+    }
 
-        foreach ($attachments as $attachment) {
-            $body    = $attachment->getBody();
-            $decoded = base64_decode($body, strict: true);
-            $content = ($decoded !== false && base64_encode($decoded) === $body)
-                ? $body
-                : base64_encode($body);
+    private function buildHeaders(): array
+    {
+        return [
+            'Authorization' => 'Bearer ' . $this->apiKey,
+            'Accept'        => 'application/json',
+        ];
+    }
 
-            $anexos[] = [
-                'filename' => $attachment->getName(),
-                'content'  => $content,
-                'mime'     => $attachment->getMediaType() . '/' . $attachment->getMediaSubtype(),
-            ];
-        }
-        return $anexos;
+    private function buildPayload(Email $email): array
+    {
+        return [
+            'recipients'  => array_map(fn($a) => $a->getAddress(), $email->getTo()),
+            'subject'     => $email->getSubject(),
+            'body'        => $email->getHtmlBody() ?? $email->getTextBody(),
+            'attachments' => $this->prepareAttachments($email->getAttachments()),
+            'staging'     => config('ati-servico.staging'),
+        ];
+    }
+
+    private function prepareAttachments(array $attachments): array
+    {
+        return array_map(fn(DataPart $a) => [
+            'filename' => $a->getName(),
+            'content'  => $this->encodeContent($a->getBody()),
+            'mime'     => $a->getMediaType() . '/' . $a->getMediaSubtype(),
+        ], $attachments);
+    }
+
+    private function encodeContent(string $body): string
+    {
+        $decoded = base64_decode($body, strict: true);
+
+        return ($decoded !== false && base64_encode($decoded) === $body)
+            ? $body
+            : base64_encode($body);
     }
 
     public function __toString(): string
