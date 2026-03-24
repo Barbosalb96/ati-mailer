@@ -3,6 +3,7 @@
 namespace Atima\ApiEmailLib;
 
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Symfony\Component\Mailer\SentMessage;
 use Symfony\Component\Mailer\Transport\AbstractTransport;
 use Symfony\Component\Mime\Email;
@@ -26,11 +27,19 @@ class AtiApiTransport extends AbstractTransport
         $response = $this->sendToApi($email);
 
         if ($response->failed()) {
-            throw new \RuntimeException(sprintf(
+            $error = sprintf(
                 '[AtiApiTransport] Falha ao enviar e-mail. Status: %d — %s',
                 $response->status(),
                 $response->body()
-            ));
+            );
+
+            Log::error($error, [
+                'to'       => array_map(fn($a) => $a->getAddress(), $email->getTo()),
+                'subject'  => $email->getSubject(),
+                'endpoint' => $this->endpoint,
+            ]);
+
+            throw new \RuntimeException($error);
         }
 
         $this->lastResponse = $response->json() ?? [];
@@ -44,8 +53,11 @@ class AtiApiTransport extends AbstractTransport
     private function sendToApi(Email $email): \Illuminate\Http\Client\Response
     {
         return Http::withHeaders($this->buildHeaders())
-            ->withOptions(['verify' => config('ati-servico.ssl_cert', true)])
-            ->post($this->endpoint . '/v2/messages/send', $this->buildPayload($email));
+            ->withOptions([
+                'verify'  => config('ati-servico.ssl_cert', true),
+                'timeout' => config('ati-servico.timeout', 30),
+            ])
+            ->post(rtrim($this->endpoint, '/') . '/v2/messages/send', $this->buildPayload($email));
     }
 
     private function buildHeaders(): array
@@ -58,13 +70,39 @@ class AtiApiTransport extends AbstractTransport
 
     private function buildPayload(Email $email): array
     {
-        return [
+        $payload = [
             'recipients'  => array_map(fn($a) => $a->getAddress(), $email->getTo()),
             'subject'     => $email->getSubject(),
             'body'        => $email->getHtmlBody() ?? $email->getTextBody(),
             'attachments' => $this->prepareAttachments($email->getAttachments()),
             'staging'     => config('ati-servico.staging'),
         ];
+
+        if ($from = $email->getFrom()) {
+            $payload['from'] = $from[0]->getAddress();
+
+            if ($from[0]->getName()) {
+                $payload['from_name'] = $from[0]->getName();
+            }
+        }
+
+        if ($cc = $email->getCc()) {
+            $payload['cc'] = array_map(fn($a) => $a->getAddress(), $cc);
+        }
+
+        if ($bcc = $email->getBcc()) {
+            $payload['bcc'] = array_map(fn($a) => $a->getAddress(), $bcc);
+        }
+
+        if ($replyTo = $email->getReplyTo()) {
+            $payload['reply_to'] = $replyTo[0]->getAddress();
+        }
+
+        if ($email->getHtmlBody() && $email->getTextBody()) {
+            $payload['text_body'] = $email->getTextBody();
+        }
+
+        return $payload;
     }
 
     private function prepareAttachments(array $attachments): array

@@ -1,4 +1,5 @@
 <?php
+
 namespace Atima\ApiEmailLib\Console;
 
 use Illuminate\Console\Command;
@@ -18,7 +19,6 @@ class InstallCommand extends Command
         $this->writeEnvVariables();
         $this->registerMailer();
         $this->registerHttpMacro();
-        $this->registerStatusRoute();
 
         $this->newLine();
         $this->info('✔ ATI Email configurado com sucesso!');
@@ -51,7 +51,7 @@ class InstallCommand extends Command
         @mkdir(dirname($certPath), 0755, true);
         file_put_contents($certPath, $pem);
 
-        $this->line("  [ok] cacert.pem salvo em storage/app/ati-cacert.pem");
+        $this->line('  [ok] cacert.pem salvo em storage/app/ati-cacert.pem');
     }
 
     private function publishConfig(): void
@@ -74,14 +74,14 @@ class InstallCommand extends Command
         $entries = [
             'MAIL_MAILER'        => 'ati',
             'ATI_EMAIL_KEY'      => 'sua_api_key_aqui',
-            'ATI_EMAIL_ENDPOINT' => 'https://api.seuservico.com/v1/send',
-            'STAGING'            => 'true',
+            'ATI_EMAIL_ENDPOINT' => 'https://api.seuservico.com',
+            'ATI_STAGING'        => 'true',
             'ATI_SSL_CERT'       => 'false',
+            'ATI_EMAIL_TIMEOUT'  => '30',
         ];
 
         foreach ($entries as $key => $default) {
             if (Str::contains($env, $key . '=')) {
-                // Já existe: apenas troca MAIL_MAILER se ainda não for 'ati'
                 if ($key === 'MAIL_MAILER') {
                     $env = preg_replace('/^MAIL_MAILER=.*/m', 'MAIL_MAILER=ati', $env);
                 }
@@ -146,19 +146,19 @@ PHP;
 
         $macro = <<<'PHP'
         Http::macro('atiEmail', function () {
-            return Http::baseUrl(rtrim(env('ATI_EMAIL_ENDPOINT'), '/') . '/api/v2/')
+            return Http::baseUrl(rtrim(config('ati-servico.endpoint'), '/'))
                 ->withHeaders([
-                    'Authorization' => 'Bearer ' . env('ATI_EMAIL_KEY'),
-                    'Accept' => 'application/json',
+                    'Authorization' => 'Bearer ' . config('ati-servico.key'),
+                    'Accept'        => 'application/json',
                 ])
                 ->withOptions([
-                    'verify' => env('ATI_SSL_CERT', true),
+                    'verify'  => config('ati-servico.ssl_cert', true),
+                    'timeout' => config('ati-servico.timeout', 30),
                 ])
                 ->acceptJson();
         });
 PHP;
 
-        // Garante o use de Http no topo do arquivo
         if (! Str::contains($content, 'use Illuminate\Support\Facades\Http;')) {
             $content = str_replace(
                 'use Illuminate\Support\ServiceProvider;',
@@ -167,7 +167,6 @@ PHP;
             );
         }
 
-        // Injeta dentro do boot(), antes do fechamento '}'
         $content = preg_replace(
             '/(\bpublic function boot\(\): void\s*\{)/',
             "$1\n        {$macro}\n",
@@ -177,88 +176,6 @@ PHP;
 
         file_put_contents($providerPath, $content);
         $this->line('  [ok] Http macro "atiEmail" adicionado em AppServiceProvider');
-    }
-
-    private function registerStatusRoute(): void
-    {
-        // Laravel 11+ usa routes/web.php; tenta api.php primeiro, depois web.php
-        $candidates = [
-            base_path('routes/api.php'),
-            base_path('routes/web.php'),
-        ];
-
-        $routesPath = null;
-        foreach ($candidates as $candidate) {
-            if (file_exists($candidate)) {
-                $routesPath = $candidate;
-                break;
-            }
-        }
-
-        if ($routesPath === null) {
-            $this->warn('  [skip] Nenhum arquivo de rotas encontrado — adicione a rota manualmente (veja INSTALL.md)');
-            return;
-        }
-
-        $content = file_get_contents($routesPath);
-
-        $useHttp  = 'use Illuminate\Support\Facades\Http;';
-        $useRoute = 'use Illuminate\Support\Facades\Route;';
-        $useMail  = 'use Illuminate\Support\Facades\Mail;';
-
-        if (! Str::contains($content, $useHttp)) {
-            $content = $useRoute . "\n" . $useHttp . "\n" . ltrim(str_replace($useRoute, '', $content));
-        }
-
-        if (! Str::contains($content, $useMail)) {
-            $content = str_replace($useHttp, $useHttp . "\n" . $useMail, $content);
-        }
-
-        if (! Str::contains($content, 'send-test')) {
-            $sendTest = <<<'PHP'
-
-Route::get('/send-test', function () {
-    $filePath = storage_path('app/teste-anexo.txt');
-    file_put_contents($filePath, 'Conteudo do arquivo de teste ATI.');
-
-    Mail::raw('Teste de envio via API', function ($m) use ($filePath) {
-        $m->to(['lucas.silva@seati.ma.gov.br', 'lucas.silva@ati.ma.gov.br'])
-          ->subject('Teste ATI')
-          ->attach($filePath, ['as' => 'anexo-teste.txt', 'mime' => 'text/plain']);
-    });
-
-    $transport = Mail::getSymfonyTransport();
-
-    return response()->json([
-        'status'   => 'enviado',
-        'response' => $transport->lastResponse,
-    ]);
-});
-PHP;
-            $content .= $sendTest;
-            $this->line("  [ok] rota /send-test adicionada em " . basename($routesPath));
-        } else {
-            $this->line('  [skip] rota /send-test já existe');
-        }
-
-        if (! Str::contains($content, 'status/{uuid}')) {
-            $statusRoute = <<<'PHP'
-
-Route::get('/status/{uuid}', function (string $uuid) {
-    return Http::atiEmail()
-        ->post("messages/{$uuid}/status", [
-            'staging' => env('STAGING', true),
-        ])
-        ->json();
-});
-PHP;
-            $content .= $statusRoute;
-            $this->line("  [ok] rota /status/{uuid} adicionada em " . basename($routesPath));
-        } else {
-            $this->line('  [skip] rota /status/{uuid} já existe');
-        }
-
-        file_put_contents($routesPath, $content);
     }
 
     private function injectBeforeMailersClosingBracket(string $content, string $block): string

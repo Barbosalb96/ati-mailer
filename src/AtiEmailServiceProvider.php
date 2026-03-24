@@ -5,6 +5,8 @@ namespace Atima\ApiEmailLib;
 use Atima\ApiEmailLib\Console\InstallCommand;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\ServiceProvider;
+use Atima\ApiEmailLib\Base64FileProcessor;
+use Atima\ApiEmailLib\InlineImageProcessor;
 
 class AtiEmailServiceProvider extends ServiceProvider
 {
@@ -32,5 +34,15 @@ class AtiEmailServiceProvider extends ServiceProvider
                 endpoint: $config['endpoint'] ?? config('ati-servico.endpoint'),
             );
         });
+
+        $this->app->singleton(Base64FileProcessor::class, fn () => new Base64FileProcessor(
+            disk:   config('ati-servico.b64_disk',   'public'),
+            folder: config('ati-servico.b64_folder', 'documents-email'),
+        ));
+
+        $this->app->singleton(InlineImageProcessor::class, fn ($app) => new InlineImageProcessor(
+            fileProcessor: $app->make(Base64FileProcessor::class),
+            disk:          config('ati-servico.b64_disk', 'public'),
+        ));
     }
 }
